@@ -27,13 +27,22 @@ void pwd(){
 }
 
 void cd(char ** args, int numargs){
-    if(numargs < 1){
+    // cd args can be:
+    // {NULL, "~", f"{someDirectory}"}
+    if(numargs < 1 || (numargs == 1 && strcmp(args[0],"~") == 0)){
+        // if no arguments or argument = "~"
         char *homeDirectory = getenv("HOME");
-        // printf("%s\n", homeDirectory);
         chdir(homeDirectory);
-    }
-    else{
-        printf("go to specified directory");
+    } else if(numargs > 1){
+        // if too many arguments (>1)
+        printf("Too many arguments");
+    } else{
+        // if 1 argument
+        if(chdir(args[0]) != 0){
+            // if changing directory throws an error
+            perror("Error");
+        }
+        // otherwise changing directory was successful
     }
 }
 
