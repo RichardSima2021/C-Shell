@@ -20,17 +20,36 @@ void promptInput(char* inputBuffPtr){
     fgets(inputBuffPtr, bufferSize, stdin);
 }
 
-void executeCommand(char* command, char** args, int argpos){
+void pwd(){
+    char* dir = getcwd(NULL, 0);
+    printf("%s\n", dir);
+    free(dir);
+}
+
+void cd(char ** args, int numargs){
+    if(numargs < 1){
+        char *homeDirectory = getenv("HOME");
+        // printf("%s\n", homeDirectory);
+        chdir(homeDirectory);
+    }
+    else{
+        printf("go to specified directory");
+    }
+}
+
+void executeCommand(char* command, char** args, int numargs){
     if (debug){
-        printf("argpos: %d\n", argpos);
-        for(int i = 0; i < argpos; i++){
+        printf("argpos: %d\n", numargs);
+        for(int i = 0; i < numargs; i++){
             printf("args: %s ", args[i]);
         }
         printf("\n");   
-    }
-
+    } 
+    
     if(strcmp(command, "pwd") == 0){
-
+        pwd();
+    } else if(strcmp(command, "cd") == 0){
+        cd(args, numargs);
     }
 }
 
@@ -38,7 +57,7 @@ int main(){
 
     char* command = "";
 
-    
+
     
     while(1){
         char inputBuffer[bufferSize]; 
