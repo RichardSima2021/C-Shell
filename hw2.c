@@ -20,9 +20,25 @@ void promptInput(char* inputBuffPtr){
     fgets(inputBuffPtr, bufferSize, stdin);
 }
 
+void executeCommand(char* command, char** args, int argpos){
+    if (debug){
+        printf("argpos: %d\n", argpos);
+        for(int i = 0; i < argpos; i++){
+            printf("args: %s ", args[i]);
+        }
+        printf("\n");   
+    }
+
+    if(strcmp(command, "pwd") == 0){
+
+    }
+}
+
 int main(){
 
     char* command = "";
+
+    
     
     while(1){
         char inputBuffer[bufferSize]; 
@@ -33,7 +49,6 @@ int main(){
             break;
         } else{
             if (debug) printf("%s\n", command); 
-            if (debug) printf("args: ");
 
             // read first argument if exists
             char* arg = strtok(NULL, whitespace); // arg is a pointer to the first cell in a char array
@@ -47,14 +62,8 @@ int main(){
                 // continue reading arguments if exists
                 arg = strtok(NULL, whitespace);
             }
-            if (debug) printf("\nargpos: %d\n", argpos);
-
-            for(int i = 0; i < argpos; i++){
-                printf("%s ", args[i]);
-            }
-
-            if (debug) printf("\n");
-
+            
+            executeCommand(command, args, argpos);
 
 
 
