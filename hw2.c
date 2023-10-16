@@ -20,12 +20,14 @@ void promptInput(char* inputBuffPtr){
     fgets(inputBuffPtr, bufferSize, stdin);
 }
 
+// implementation for pwd shell command
 void pwd(){
     char* dir = getcwd(NULL, 0);
     printf("%s\n", dir);
     free(dir);
 }
 
+// implementation for cd shell command
 void cd(char ** args, int numargs){
     // cd args can be:
     // {NULL, "~", f"{someDirectory}"}
@@ -59,7 +61,19 @@ void executeCommand(char* command, char** args, int numargs){
         pwd();
     } else if(strcmp(command, "cd") == 0){
         cd(args, numargs);
+    } else if(strcmp(command, "fg") == 0){
+        // change job that is in stopped or background/running to fg/running
+        // job is identified via %+job_id or pid
+    } else if(strcmp(command, "bg") == 0){
+        // change job that is in stopped to background/running
+        // same identifiers as fg
+    } else if(strcmp(command, "kill") == 0){
+        // kill job and reap | use kill() syscall with -9 signal to kill process
+        // same identifiers
+    } else{
+        // 
     }
+    
 }
 
 int main(){
@@ -71,6 +85,10 @@ int main(){
     while(1){
         char inputBuffer[bufferSize]; 
         promptInput(inputBuffer);
+        if(strcmp(inputBuffer, "\n") == 0){
+            // empty command, do nothing
+            continue;
+        }
         command = strtok(inputBuffer, whitespace);
         
         if(strcmp(command, quit) == 0){
