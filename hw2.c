@@ -38,7 +38,7 @@ void cd(char ** args, int numargs){
         chdir(homeDirectory);
     } else if(numargs > 1){
         // if too many arguments (>1)
-        printf("Too many arguments");
+        printf("Error: Too many arguments");
     } else{
         // if 1 argument
         if(chdir(args[0]) != 0){
@@ -50,30 +50,22 @@ void cd(char ** args, int numargs){
 }
 
 void executeTaskFg(char* programName, char** args, int numargs){
-    if(numargs < 1){
-        // no arguments supplied to the foreground program
-        pid_t pid = fork();
-        if(pid == 0){
-            // child
-            char* execArgs[] = {programName, NULL};
-            if(execv(programName, execArgs)){
-                // if there's a return value at all
-                printf("%s: Program not found.\n", programName);
-                exit(0);
-            }
-        } else{
-            // parent, pid = process id of child
-            int child_status;
-            waitpid(pid, &child_status, 0);
-            if(debug) printf("Child finished and reaped\n");
+    pid_t pid = fork();
+
+    if(pid == 0){
+        // child
+        if(execv(programName, args)){
+            // if there's a return value at all
+            printf("%s: Program not found.\n", programName);
+            exit(0);
         }
-        
     } else{
-        printf("Execute a program in fg with arguments\n");
+        // parent, pid = process id of child
+        int child_status;
+        waitpid(pid, &child_status, 0);
+        if (debug) printf("Child finished and reaped\n");
     }
-    // execv
-    // wait
-    
+
 }
 
 void executeCommand(char* command, char** args, int numargs){
@@ -99,9 +91,9 @@ void executeCommand(char* command, char** args, int numargs){
         // kill job and reap | use kill() syscall with -9 signal to kill process
         // same identifiers
     } else{
-        printf("Execute task ");
+         if (debug) printf("Execute task");
         // start executing a program in fore/background
-        if(numargs > 0){
+        if(numargs > 0 && strcmp(args[0], "&") == 0){
             if (debug) printf(" in background\n");
             // execute background
         } else{
