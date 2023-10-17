@@ -13,6 +13,7 @@
 #define whitespace " \t\n"
 #define quit "quit"
 
+
 int debug = 1;
 
 void promptInput(char* inputBuffPtr){
@@ -48,9 +49,36 @@ void cd(char ** args, int numargs){
     }
 }
 
+void executeTaskFg(char* programName, char** args, int numargs){
+    if(numargs < 1){
+        // no arguments supplied to the foreground program
+        pid_t pid = fork();
+        if(pid == 0){
+            // child
+            char* execArgs[] = {programName, NULL};
+            if(execv(programName, execArgs)){
+                // if there's a return value at all
+                printf("%s: Program not found.\n", programName);
+                exit(0);
+            }
+        } else{
+            // parent, pid = process id of child
+            int child_status;
+            waitpid(pid, &child_status, 0);
+            if(debug) printf("Child finished and reaped\n");
+        }
+        
+    } else{
+        printf("Execute a program in fg with arguments\n");
+    }
+    // execv
+    // wait
+    
+}
+
 void executeCommand(char* command, char** args, int numargs){
     if (debug){
-        printf("argpos: %d\n", numargs);
+        printf("numargs: %d\n", numargs);
         for(int i = 0; i < numargs; i++){
             printf("args: %s ", args[i]);
         }
@@ -71,7 +99,15 @@ void executeCommand(char* command, char** args, int numargs){
         // kill job and reap | use kill() syscall with -9 signal to kill process
         // same identifiers
     } else{
-        // 
+        printf("Execute task ");
+        // start executing a program in fore/background
+        if(numargs > 0){
+            if (debug) printf(" in background\n");
+            // execute background
+        } else{
+            if (debug) printf(" in foreground\n");
+            executeTaskFg(command, args, numargs);
+        }
     }
     
 }
@@ -85,16 +121,16 @@ int main(){
     while(1){
         char inputBuffer[bufferSize]; 
         promptInput(inputBuffer);
-        if(strcmp(inputBuffer, "\n") == 0){
-            // empty command, do nothing
-            continue;
-        }
+
+        // empty line, do nothing
+        if(strcmp(inputBuffer, "\n") == 0) continue;
+        
         command = strtok(inputBuffer, whitespace);
         
         if(strcmp(command, quit) == 0){
             break;
         } else{
-            if (debug) printf("%s\n", command); 
+            if (debug) printf("command: %s\n", command); 
 
             // read first argument if exists
             char* arg = strtok(NULL, whitespace); // arg is a pointer to the first cell in a char array
