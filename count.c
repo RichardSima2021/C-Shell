@@ -1,11 +1,16 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 
-int main(){
+int main(int argc, char const * argv[]){
     int i = 0;
-    for(int c = 0; c < 5; c++){
+    int count = 5;
+    if(argc != 1){
+        count = atoi(argv[1]);
+    }
+    for(int c = 1; c <= count; c++){
         printf("Count: %d\n", c);
         sleep(1);
     }
