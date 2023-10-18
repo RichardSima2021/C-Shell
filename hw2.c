@@ -16,7 +16,12 @@
 
 int debug = 1;
 
-void shellSigHandler(int sig){}
+void shellINTHandler(int sig){
+    if (debug) printf("Handled SIGINT\n");
+}
+void shellTSTPHandler(int sig){
+    if (debug) printf("Handled TSTP\n");
+}
 
 void promptInput(char* inputBuffPtr){
     printf("%s", "prompt > ");
@@ -59,6 +64,8 @@ void executeTaskFg(char* programName, char** args, int numargs){
         
         // child
         if(execv(programName, args)){
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
             // if there's a return value at all
             printf("%s: Program not found.\n", programName);
             exit(0);
@@ -109,8 +116,8 @@ void executeCommand(char* command, char** args, int numargs){
 }
 
 int main(){
-    signal(SIGINT, shellSigHandler);
-    signal(SIGTSTP, shellSigHandler);
+    signal(SIGINT, shellINTHandler);
+    signal(SIGTSTP, shellTSTPHandler);
     char* command = "";
     
     while(1){
