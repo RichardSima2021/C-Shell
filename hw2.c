@@ -16,6 +16,8 @@
 
 int debug = 1;
 
+void shellSigHandler(int sig){}
+
 void promptInput(char* inputBuffPtr){
     printf("%s", "prompt > ");
     fgets(inputBuffPtr, bufferSize, stdin);
@@ -32,16 +34,17 @@ void pwd(){
 void cd(char ** args, int numargs){
     // cd args can be:
     // {NULL, "~", f"{someDirectory}"}
-    if(numargs < 1 || (numargs == 1 && strcmp(args[0],"~") == 0)){
+    if(numargs < 1 || (numargs == 1 && strcmp(args[1],"~") == 0)){
         // if no arguments or argument = "~"
         char *homeDirectory = getenv("HOME");
         chdir(homeDirectory);
-    } else if(numargs > 1){
+    } else if(numargs > 2){
         // if too many arguments (>1)
         printf("Error: Too many arguments");
     } else{
+        // fix
         // if 1 argument
-        if(chdir(args[0]) != 0){
+        if(chdir(args[1]) != 0){
             // if changing directory throws an error
             perror("Error");
         }
@@ -53,6 +56,7 @@ void executeTaskFg(char* programName, char** args, int numargs){
     pid_t pid = fork();
 
     if(pid == 0){
+        
         // child
         if(execv(programName, args)){
             // if there's a return value at all
@@ -105,10 +109,9 @@ void executeCommand(char* command, char** args, int numargs){
 }
 
 int main(){
-
+    signal(SIGINT, shellSigHandler);
+    signal(SIGTSTP, shellSigHandler);
     char* command = "";
-
-
     
     while(1){
         char inputBuffer[bufferSize]; 
@@ -124,11 +127,14 @@ int main(){
         } else{
             if (debug) printf("command: %s\n", command); 
 
+            // defines an array of 80 charpointers [command, arg1, arg2, ...]
+            char* args[80] = {NULL};   
+            // store command into first element
+            args[0] = command;
+
             // read first argument if exists
             char* arg = strtok(NULL, whitespace); // arg is a pointer to the first cell in a char array
-            int argpos = 0;
-            char* args[80] = {NULL}; // defines an array of 80 charpointers, these will store all the arguments of the command if there are any
-            
+            int argpos = 1;
 
             while(arg != NULL){
                 args[argpos] = strdup(arg); // pointer to duplicated argument since arg will be overwritten by next strtok call
@@ -137,10 +143,8 @@ int main(){
                 arg = strtok(NULL, whitespace);
             }
             
-            executeCommand(command, args, argpos);
-
-
-
+            // argpos - 1 = actual number of arguments (excludes command)
+            executeCommand(command, args, argpos - 1);
         }
 
     }
