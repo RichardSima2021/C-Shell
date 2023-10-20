@@ -16,11 +16,17 @@
 
 int debug = 1;
 
-void shellINTHandler(int sig){
+void nonResponseINTHandler(int sig){
     if (debug) printf("Handled SIGINT\n");
 }
-void shellTSTPHandler(int sig){
+void nonResponseTSTPHandler(int sig){
     if (debug) printf("Handled TSTP\n");
+}
+void SIGCHLDHandler(int sig){
+    if (debug) printf("SIGCHLD handler called\n");
+    int child_status;
+    wait(&child_status);
+    if (debug) printf("A background child was reaped\n");
 }
 
 void promptInput(char* inputBuffPtr){
@@ -61,22 +67,38 @@ void executeTaskFg(char* programName, char** args, int numargs){
     pid_t pid = fork();
 
     if(pid == 0){
-        
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGCHLD, SIG_DFL);
+        if (debug) printf("Forked child and running fg process: %s pid: %d\n", programName, getpid());
         // child
         if(execv(programName, args)){
-            signal(SIGINT, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
             // if there's a return value at all
             printf("%s: Program not found.\n", programName);
             exit(0);
         }
     } else{
+        signal(SIGCHLD, SIG_DFL);
         // parent, pid = process id of child
         int child_status;
         waitpid(pid, &child_status, 0);
         if (debug) printf("Child finished and reaped\n");
     }
+}
 
+void executeTaskBg(char* programName, char** args, int numargs){
+    if (debug) printf("called execute task in background with program: %s\n", programName);
+    pid_t pid = fork();
+    if(pid == 0){
+        // child
+        if (debug) printf("Forked child and running bg process: %s, pid: %d\n", programName, getpid());
+        if(execv(programName, args)){
+            perror("execv");
+            exit(EXIT_FAILURE);
+        }
+    } else{
+        // nothing, parent keeps executing normally
+    }
 }
 
 void executeCommand(char* command, char** args, int numargs){
@@ -104,9 +126,10 @@ void executeCommand(char* command, char** args, int numargs){
     } else{
          if (debug) printf("Execute task");
         // start executing a program in fore/background
-        if(numargs > 0 && strcmp(args[0], "&") == 0){
+        if(numargs > 0 && strcmp(args[numargs], "&") == 0){
+            // check if last arg is an "&"
             if (debug) printf(" in background\n");
-            // execute background
+            executeTaskBg(command, args, numargs);
         } else{
             if (debug) printf(" in foreground\n");
             executeTaskFg(command, args, numargs);
@@ -116,8 +139,9 @@ void executeCommand(char* command, char** args, int numargs){
 }
 
 int main(){
-    signal(SIGINT, shellINTHandler);
-    signal(SIGTSTP, shellTSTPHandler);
+    signal(SIGINT, nonResponseINTHandler);
+    signal(SIGTSTP, nonResponseTSTPHandler);
+    signal(SIGCHLD, SIGCHLDHandler);
     char* command = "";
     
     while(1){
@@ -132,8 +156,6 @@ int main(){
         if(strcmp(command, quit) == 0){
             break;
         } else{
-            if (debug) printf("command: %s\n", command); 
-
             // defines an array of 80 charpointers [command, arg1, arg2, ...]
             char* args[80] = {NULL};   
             // store command into first element
@@ -151,6 +173,11 @@ int main(){
             }
             
             // argpos - 1 = actual number of arguments (excludes command)
+            // example:
+            // prompt > count 5 &
+            // command = "count"
+            // args = ["count", "5", "&"]
+            // argpos = 2
             executeCommand(command, args, argpos - 1);
         }
 
