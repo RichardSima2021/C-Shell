@@ -97,8 +97,8 @@ int main() {
         input[strcspn(input, "\n")] = 0;  // remove the newline
         
         if (strstr(input, "&")) {
-            sscanf(input, "%s", command);
             pid = fork();
+            sscanf(input, "%s", command);
             if (pid == 0) {
                 execlp(command, command, (char *) NULL);
                 exit(EXIT_FAILURE);  // execlp failed

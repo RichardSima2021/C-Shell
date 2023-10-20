@@ -78,11 +78,12 @@ void executeTaskFg(char* programName, char** args, int numargs){
             exit(0);
         }
     } else{
-        signal(SIGCHLD, SIG_DFL);
         // parent, pid = process id of child
+
+        signal(SIGCHLD, SIG_DFL);
         int child_status;
         waitpid(pid, &child_status, 0);
-        if (debug) printf("Child finished and reaped\n");
+        if (debug) printf("Foreground child finished and reaped\n");
     }
 }
 
@@ -96,9 +97,7 @@ void executeTaskBg(char* programName, char** args, int numargs){
             perror("execv");
             exit(EXIT_FAILURE);
         }
-    } else{
-        // nothing, parent keeps executing normally
-    }
+    } else{ /*nothing, parent keeps executing normally*/ }
 }
 
 void executeCommand(char* command, char** args, int numargs){
