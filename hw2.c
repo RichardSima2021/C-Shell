@@ -25,8 +25,17 @@ void nonResponseTSTPHandler(int sig){
 void SIGCHLDHandler(int sig){
     if (debug) printf("SIGCHLD handler called\n");
     int child_status;
-    wait(&child_status);
-    if (debug) printf("A background child was reaped\n");
+    int waitpid_status = waitpid(-1, &child_status, WNOHANG); 
+    if (debug) printf("waitpid called\n");
+    if(debug){
+        if(waitpid_status <= 0){
+            perror("waitpid");
+        } else if(waitpid_status > 0){
+            printf("Child reaped by SIGCHLD handler\n");
+        }
+    }
+    
+    
 }
 void nonResponseCHLDHandler(int sig){
     if (debug) printf("PID: %d encountered a SIGCHLD signal and ignored it\n", getpid());
@@ -84,7 +93,7 @@ void executeTaskFg(char* programName, char** args, int numargs){
         // parent, pid = process id of child
         int child_status;
         if (debug) printf("shell waiting for foreground task to complete\n");
-        waitpid(pid, &child_status, 0); // shouldn't this "consume" the SIGCHLD and thus the custom handler shouldn't need to be called?
+        waitpid(pid, &child_status, 0); 
         if (debug) printf("Foreground child finished and reaped\n");
     }
 }
@@ -98,9 +107,9 @@ void executeTaskBg(char* programName, char** args, int numargs){
             // error setting pgid to its own pid
             perror("setpgid");
         }
-        // signal(SIGINT, nonResponseINTHandler); // should not respond to any SIGINT
-        // signal(SIGTSTP, nonResponseTSTPHandler); // should not respond to any SIGTSTP
-        signal(SIGCHLD, nonResponseCHLDHandler); // should not respond to any SIGCHLD
+        signal(SIGINT, nonResponseINTHandler); // should not respond to any SIGINT
+        signal(SIGTSTP, nonResponseTSTPHandler); // should not respond to any SIGTSTP
+        // signal(SIGCHLD, nonResponseCHLDHandler); // should not respond to any SIGCHLD
         if (debug) printf("Forked child and running bg process: %s, pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         if(execv(programName, args)){
             perror("execv");
