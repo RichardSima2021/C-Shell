@@ -92,6 +92,8 @@ void executeTaskBg(char* programName, char** args, int numargs){
     pid_t pid = fork();
     if(pid == 0){
         // child
+        signal(SIGINT, nonResponseINTHandler);
+        signal(SIGTSTP, nonResponseTSTPHandler);
         if (debug) printf("Forked child and running bg process: %s, pid: %d\n", programName, getpid());
         if(execv(programName, args)){
             perror("execv");
