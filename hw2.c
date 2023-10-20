@@ -17,10 +17,10 @@
 int debug = 1;
 
 void nonResponseINTHandler(int sig){
-    if (debug) printf("Handled SIGINT\n");
+    if (debug) printf("Handled SIGINT from %d\n", getpid());
 }
 void nonResponseTSTPHandler(int sig){
-    if (debug) printf("Handled TSTP\n");
+    if (debug) printf("Handled TSTP from %d\n", getpid());
 }
 void SIGCHLDHandler(int sig){
     if (debug) printf("SIGCHLD handler called\n");
@@ -28,6 +28,9 @@ void SIGCHLDHandler(int sig){
     wait(&child_status);
     if (debug) printf("A background child was reaped\n");
 }
+void nonResponseCHLDHandler(int sig){
+    if (debug) printf("PID: %d encountered a SIGCHLD signal and ignored it\n", getpid());
+} 
 
 void promptInput(char* inputBuffPtr){
     printf("%s", "prompt > ");
@@ -67,10 +70,10 @@ void executeTaskFg(char* programName, char** args, int numargs){
     pid_t pid = fork();
 
     if(pid == 0){
-        signal(SIGINT, SIG_DFL);
-        signal(SIGTSTP, SIG_DFL);
-        signal(SIGCHLD, SIG_DFL);
-        if (debug) printf("Forked child and running fg process: %s pid: %d\n", programName, getpid());
+        signal(SIGINT, SIG_DFL); // fg task must be able to be affected by Ctrl+C
+        signal(SIGTSTP, SIG_DFL); // fg task must be able to be affected by Ctrl+Z
+        // signal(SIGCHLD, nonResponseCHLDHandler); 
+        if (debug) printf("Forked child and running fg process: %s pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         // child
         if(execv(programName, args)){
             // if there's a return value at all
@@ -79,10 +82,9 @@ void executeTaskFg(char* programName, char** args, int numargs){
         }
     } else{
         // parent, pid = process id of child
-
-        signal(SIGCHLD, SIG_DFL);
         int child_status;
-        waitpid(pid, &child_status, 0);
+        if (debug) printf("shell waiting for foreground task to complete\n");
+        waitpid(pid, &child_status, 0); // shouldn't this "consume" the SIGCHLD and thus the custom handler shouldn't need to be called?
         if (debug) printf("Foreground child finished and reaped\n");
     }
 }
@@ -92,9 +94,14 @@ void executeTaskBg(char* programName, char** args, int numargs){
     pid_t pid = fork();
     if(pid == 0){
         // child
-        signal(SIGINT, nonResponseINTHandler);
-        signal(SIGTSTP, nonResponseTSTPHandler);
-        if (debug) printf("Forked child and running bg process: %s, pid: %d\n", programName, getpid());
+        if(setpgid(getpid(),getpid()) == -1){
+            // error setting pgid to its own pid
+            perror("setpgid");
+        }
+        // signal(SIGINT, nonResponseINTHandler); // should not respond to any SIGINT
+        // signal(SIGTSTP, nonResponseTSTPHandler); // should not respond to any SIGTSTP
+        signal(SIGCHLD, nonResponseCHLDHandler); // should not respond to any SIGCHLD
+        if (debug) printf("Forked child and running bg process: %s, pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         if(execv(programName, args)){
             perror("execv");
             exit(EXIT_FAILURE);
@@ -104,9 +111,9 @@ void executeTaskBg(char* programName, char** args, int numargs){
 
 void executeCommand(char* command, char** args, int numargs){
     if (debug){
-        printf("numargs: %d\n", numargs);
-        for(int i = 0; i < numargs; i++){
-            printf("args: %s ", args[i]);
+        printf("numargs: %d\nargs: ", numargs);
+        for(int i = 1; i < numargs + 1; i++){
+            printf("%s ", args[i]);
         }
         printf("\n");   
     } 
@@ -124,6 +131,8 @@ void executeCommand(char* command, char** args, int numargs){
     } else if(strcmp(command, "kill") == 0){
         // kill job and reap | use kill() syscall with -9 signal to kill process
         // same identifiers
+    } else if(strcmp(command, "println") == 0 && debug){
+        printf("-------------------------------------------------\n");
     } else{
          if (debug) printf("Execute task");
         // start executing a program in fore/background
@@ -140,6 +149,7 @@ void executeCommand(char* command, char** args, int numargs){
 }
 
 int main(){
+    if (debug) printf("shell started in gpid: %d\n", getpgid(getpid()));
     signal(SIGINT, nonResponseINTHandler);
     signal(SIGTSTP, nonResponseTSTPHandler);
     signal(SIGCHLD, SIGCHLDHandler);
