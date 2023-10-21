@@ -14,7 +14,26 @@
 #define quit "quit"
 
 
-int debug = 1;
+int debug = 0;
+
+struct Job{
+    // each child process owns a struct
+    int jobId; // assigned by shell
+    int processId; // returned to parent
+
+    // 1 = fg
+    // 2 = bg
+    int foreground;
+    // Running
+    // Stopped
+    char* status;
+    char** args;
+    int numargs;
+};  
+
+struct Job* jobList[5] = {NULL};
+int latestJobId = 1;
+int nextJobIndex = 0;
 
 void nonResponseINTHandler(int sig){
     if (debug) printf("Handled SIGINT from %d\n", getpid());
@@ -27,15 +46,13 @@ void SIGCHLDHandler(int sig){
     int child_status;
     int waitpid_status = waitpid(-1, &child_status, WNOHANG); 
     if (debug) printf("waitpid called\n");
-    if(debug){
+    if (debug){
         if(waitpid_status <= 0){
             perror("waitpid");
         } else if(waitpid_status > 0){
             printf("Child reaped by SIGCHLD handler\n");
         }
     }
-    
-    
 }
 void nonResponseCHLDHandler(int sig){
     if (debug) printf("PID: %d encountered a SIGCHLD signal and ignored it\n", getpid());
@@ -115,7 +132,43 @@ void executeTaskBg(char* programName, char** args, int numargs){
             perror("execv");
             exit(EXIT_FAILURE);
         }
-    } else{ /*nothing, parent keeps executing normally*/ }
+    } else{
+        
+        struct Job* newBackgroundJob = malloc(sizeof(struct Job)); // will need to free later in SIGCHLD handler or smth
+        newBackgroundJob -> jobId = latestJobId;
+        newBackgroundJob -> processId = pid;
+        newBackgroundJob -> foreground = 2;
+        newBackgroundJob -> status = "Running";
+        // newBackgroundJob -> args = args;
+        newBackgroundJob -> numargs = numargs;
+
+        if (debug) printf("Duplicating the following arguments: ");
+        char** argsCopy = malloc((numargs + 2) * sizeof(char*));
+        for (int i = 0; i < numargs + 1; i++){
+            if (debug) printf("%s ", args[i]);
+            argsCopy[i] = strdup(args[i]);
+        }
+        argsCopy[numargs + 1] = NULL;
+        newBackgroundJob -> args = argsCopy; // will need to free the array and each string later
+
+
+        jobList[nextJobIndex] = newBackgroundJob;
+        if (debug) printf("\nCreating a new job and insert into jobList at index %d\n", nextJobIndex);
+        nextJobIndex += 1;
+        latestJobId += 1;
+    }
+}
+
+void printJob(struct Job* jobPtr){
+    struct Job job = *jobPtr;
+    printf("[%d] ", job.jobId);
+    printf("(%d) ", job.processId);
+    printf("%s ", job.status);
+    printf("%s", job.args[0]);
+    for(int i = 1; i < job.numargs + 1; i++){
+        printf(" %s", job.args[i]);
+    }
+    printf("\n");
 }
 
 void executeCommand(char* command, char** args, int numargs){
@@ -140,7 +193,14 @@ void executeCommand(char* command, char** args, int numargs){
     } else if(strcmp(command, "kill") == 0){
         // kill job and reap | use kill() syscall with -9 signal to kill process
         // same identifiers
-    } else if(strcmp(command, "println") == 0 && debug){
+    } else if(strcmp(command, "jobs") == 0){
+        // print all jobs from jobList
+        int jobIndex = 0;
+        while(jobList[jobIndex] != NULL){
+            printJob(jobList[jobIndex]); // fill in printJob later
+            jobIndex += 1;
+        }
+    } else if(strcmp(command, "println") == 0){
         printf("-------------------------------------------------\n");
     } else{
          if (debug) printf("Execute task");
@@ -192,7 +252,7 @@ int main(){
                 arg = strtok(NULL, whitespace);
             }
             
-            // argpos - 1 = actual number of arguments (excludes command)
+            // argpos - 1 = actual number of arguments (excludes command) aka numargs in function
             // example:
             // prompt > count 5 &
             // command = "count"
