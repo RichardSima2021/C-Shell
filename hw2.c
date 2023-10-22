@@ -220,6 +220,31 @@ void executeTaskFg(char* programName, char** args, int numargs){
     }
 }
 
+void bringToForeground(char** args, int numargs){
+    int restartPid;
+    if(args[1][0] == '%'){
+        // by jobid
+        int length = 0;
+        while(args[1][length+1] != '\0'){
+            length += 1;
+        }
+        char jobidstr[length + 1];
+        strncpy(jobidstr, args[1] + 1, length);
+        jobidstr[length] = '\0';
+        int jobid = atoi(jobidstr);
+        if (debug) printf("Bring to foreground by jobid via jobid %d\n", jobid);
+        for(int i = 0; i < nextJobIndex; i++){
+            if(jobList[i] -> jobId == jobid){
+                printf("process id: %d\n", jobList[i] -> processId);
+                break;
+            }
+        }
+
+    } else{
+        // by pid
+    }
+}
+
 void executeTaskBg(char* programName, char** args, int numargs){
     if (debug) printf("called execute task in background with program: %s\n", programName);
     pid_t pid = fork();
@@ -263,6 +288,8 @@ void executeTaskBg(char* programName, char** args, int numargs){
     }
 }
 
+
+
 void killJob(char** args, int numargs){
     int passedByJobID;
     if (args[1][0] == '%'){
@@ -300,6 +327,11 @@ void executeCommand(char* command, char** args, int numargs){
     } else if(strcmp(command, "fg") == 0){
         // change job that is in stopped or background/running to fg/running
         // job is identified via %+job_id or pid
+        if(numargs == 0){
+            printf("Error: no jobid or processid provided");
+        } else{
+            bringToForeground(args, numargs);
+        }
     } else if(strcmp(command, "bg") == 0){
         // change job that is in stopped to background/running
         // same identifiers as fg
