@@ -78,6 +78,17 @@ void jobStatusStopped(int stoppedPid){
     }
 }
 
+void jobStatusFg(int restartPid){
+    // updates the job's information when it's brought from stopped to fg
+    for(int i = 0; i < nextJobIndex; i++){
+        if(jobList[i] -> processId == restartPid){
+            jobList[i] -> status = "Running";
+            jobList[i] -> foreground = 1;
+            break;
+        }
+    }
+}
+
 void nonResponseINTHandler(int sig){
     if (debug) printf("Handled SIGINT from %d\n", getpid());
 }
@@ -174,7 +185,6 @@ void executeTaskFg(char* programName, char** args, int numargs){
             printf("%s: Program not found.\n", programName);
             exit(0);
         }
-        kill(getppid(), SIGUSR1);
     } else{
         // parent, pid = process id of child
         int child_status;
@@ -245,6 +255,28 @@ void bringToForeground(char** args, int numargs){
         if (debug) printf("Bring to foreground by processid via processid %d\n", restartPid);
         // by pid
     }
+
+    if (kill(restartPid, SIGCONT) == -1){
+        perror("SIGCONT signal error");
+    } else{
+        jobStatusFg(restartPid);
+        int child_status;
+        int waitpid_status = waitpid(restartPid, &child_status, WUNTRACED); 
+        
+        if (debug) printf("waitpid of foreground process called\n");
+
+        if (WIFEXITED(child_status)){
+            if (debug) printf("Foreground child finished and reaped\n");
+            cleanJobList(waitpid_status);
+        } else if (WIFSIGNALED(child_status)){
+            if (debug) printf("Foreground child was terminated and reaped\n");
+            cleanJobList(waitpid_status);
+        } else if (WIFSTOPPED(child_status)){
+            if (debug) printf("Foreground child was stopped\n");
+            jobStatusStopped(waitpid_status);
+        }
+    }
+
 }
 
 void executeTaskBg(char* programName, char** args, int numargs){
