@@ -235,12 +235,14 @@ void bringToForeground(char** args, int numargs){
         if (debug) printf("Bring to foreground by jobid via jobid %d\n", jobid);
         for(int i = 0; i < nextJobIndex; i++){
             if(jobList[i] -> jobId == jobid){
-                printf("process id: %d\n", jobList[i] -> processId);
+                if (debug) printf("process id: %d\n", jobList[i] -> processId);
+                restartPid = jobList[i] -> processId;
                 break;
             }
         }
-
     } else{
+        restartPid = atoi(args[1]);
+        if (debug) printf("Bring to foreground by processid via processid %d\n", restartPid);
         // by pid
     }
 }
