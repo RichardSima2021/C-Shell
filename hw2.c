@@ -79,7 +79,7 @@ void jobStatusStopped(int stoppedPid){
     }
 }
 
-void resumeJobStatusFg(int restartPid, int fgStatus){
+void resumeJobStatus(int restartPid, int fgStatus){
     // updates the job's information when it's brought from stopped to fg
     for(int i = 0; i < nextJobIndex; i++){
         if(jobList[i] -> processId == restartPid){
@@ -276,10 +276,11 @@ void bringToForeground(char** args, int numargs){
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
     } else{
-        resumeJobStatusFg(restartPid, 1);
+        resumeJobStatus(restartPid, 1);
         if (debug) printf("Setting process id: %d to process group id: %d\n", restartPid, getpid());
         // set task to foreground process group id;
         setpgid(restartPid,getpid());
+        if (debug) printf("Process with PID: %d now running in PG with PGID: %d\n", restartPid, getpgid(getpid()));
         int child_status;
         int waitpid_status = waitpid(restartPid, &child_status, WUNTRACED); 
         
@@ -373,7 +374,7 @@ void bringToBackground(char** args, int numargs){
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
     } else{
-        resumeJobStatusFg(restartPid, 0);
+        resumeJobStatus(restartPid, 0);
         // set task to background process group id;
         setpgid(restartPid,restartPid);
         if (debug) printf("Resumed in background\n");
