@@ -78,12 +78,12 @@ void jobStatusStopped(int stoppedPid){
     }
 }
 
-void jobStatusFg(int restartPid){
+void resumeJobStatusFg(int restartPid, int fgStatus){
     // updates the job's information when it's brought from stopped to fg
     for(int i = 0; i < nextJobIndex; i++){
         if(jobList[i] -> processId == restartPid){
             jobList[i] -> status = "Running";
-            jobList[i] -> foreground = 1;
+            jobList[i] -> foreground = fgStatus;
             break;
         }
     }
@@ -259,7 +259,7 @@ void bringToForeground(char** args, int numargs){
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
     } else{
-        jobStatusFg(restartPid);
+        resumeJobStatusFg(restartPid, 1);
         int child_status;
         int waitpid_status = waitpid(restartPid, &child_status, WUNTRACED); 
         
@@ -276,7 +276,6 @@ void bringToForeground(char** args, int numargs){
             jobStatusStopped(waitpid_status);
         }
     }
-
 }
 
 void executeTaskBg(char* programName, char** args, int numargs){
@@ -319,6 +318,40 @@ void executeTaskBg(char* programName, char** args, int numargs){
         if (debug) printf("\nCreating a new job and insert into jobList at index %d\n", nextJobIndex);
         nextJobIndex += 1;
         latestJobId += 1;
+    }
+}
+
+void bringToBackground(char** args, int numargs){
+    int restartPid;
+    if(args[1][0] == '%'){
+        // by jobid
+        int length = 0;
+        while(args[1][length+1] != '\0'){
+            length += 1;
+        }
+        char jobidstr[length + 1];
+        strncpy(jobidstr, args[1] + 1, length);
+        jobidstr[length] = '\0';
+        int jobid = atoi(jobidstr);
+        if (debug) printf("Bring to background by jobid via jobid %d\n", jobid);
+        for(int i = 0; i < nextJobIndex; i++){
+            if(jobList[i] -> jobId == jobid){
+                if (debug) printf("process id: %d\n", jobList[i] -> processId);
+                restartPid = jobList[i] -> processId;
+                break;
+            }
+        }
+    } else{
+        restartPid = atoi(args[1]);
+        if (debug) printf("Bring to background by processid via processid %d\n", restartPid);
+        // by pid
+    }
+
+    if (kill(restartPid, SIGCONT) == -1){
+        perror("SIGCONT signal error");
+    } else{
+        resumeJobStatusFg(restartPid, 0);
+        if (debug) printf("Resumed in background");
     }
 }
 
@@ -369,6 +402,11 @@ void executeCommand(char* command, char** args, int numargs){
     } else if(strcmp(command, "bg") == 0){
         // change job that is in stopped to background/running
         // same identifiers as fg
+        if(numargs == 0){
+            printf("Error: no jobid or processid provided");
+        } else{
+            bringToBackground(args, numargs);
+        }
     } else if(strcmp(command, "kill") == 0){
         // kill job and reap | use kill() syscall with -9 signal to kill process
         // same identifiers
