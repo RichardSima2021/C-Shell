@@ -71,60 +71,81 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-pid_t pid = 0;
+#define CHILD_NUMBER 1024
+
+pid_t children[CHILD_NUMBER];
+int child_count = 0;
+pid_t fg_pid = 0;
+
+void sigint_handler(int signo) {
+    if (fg_pid > 0) {
+        kill(fg_pid, SIGINT);
+    }
+}
 
 void sigchld_handler(int signo) {
     while (waitpid(-1, NULL, WNOHANG) > 0);
 }
 
-void sigint_handler(int signo) {
-    if (pid > 0) {
-        kill(pid, SIGINT);
+void terminate_all_children() {
+    for (int i = 0; i < child_count; ++i) {
+        kill(children[i], SIGTERM);  // or SIGKILL if you prefer a forceful termination
     }
 }
 
 int main() {
-    char command[50];
-    char argument[1024];
-    char input[1050];
-    
+    char command[1024];
+    char *argument;
+
     signal(SIGINT, sigint_handler);
     signal(SIGCHLD, sigchld_handler);
 
     while (1) {
         printf("prompt > ");
-        fgets(input, sizeof(input), stdin);
-        input[strcspn(input, "\n")] = 0;  // remove the newline
-        
-        if (strstr(input, "&")) {
-            pid = fork();
-            sscanf(input, "%s", command);
-            if (pid == 0) {
-                execlp(command, command, (char *) NULL);
-                exit(EXIT_FAILURE);  // execlp failed
+        fgets(command, sizeof(command), stdin);
+        size_t cmd_len = strlen(command);
+        if (command[cmd_len - 1] == '\n'){
+            command[cmd_len - 1] = '\0';
+            --cmd_len;
+        }
+        int is_bg = (command[cmd_len - 1] == '&');
+        if (is_bg){
+            command[cmd_len - 1] = '\0';
+        }
+
+        argument = strchr(command, ' ');  // Find the first space, if any
+        if (argument) {
+            *argument = '\0';  // Null-terminate the command
+            argument++;  // Move to the next character
+        }
+
+        if (strcmp(command, "quit") == 0) {
+            terminate_all_children();
+            break;
+        } else if (strcmp(command, "cd") == 0) {
+            if (chdir(argument) != 0) {
+                perror("No such file or directory.");
             }
-            // don't wait for child process if it's a background job
         } else {
-            sscanf(input, "%s %s", command, argument);
-            
-            if (strcmp(command, "cd") == 0) {
-                if (chdir(argument) != 0) { perror("No such file or directory."); }
-            } else if (strcmp(command, "pwd") == 0) {
-                char cwd[1024];
-                if (getcwd(cwd, sizeof(cwd)) != NULL) {
-                    printf("%s\n", cwd);
-                } else {
-                    perror("Error getting current working directory");
-                }
-            } else if (strcmp(command, "quit") == 0) {
-                break;
+            pid_t pid = fork();
+
+            if (pid < 0) {
+                perror("Could not fork");
+                exit(1);
+            }
+            if (pid == 0) {
+                setpgid(0, 0); //process group id, set it to be itself
+                char *args[] = {command, argument, NULL};
+                execvp(args[0], args);
+                perror("Execution failed");
+                exit(1);
             } else {
-                pid = fork();
-                if (pid == 0) {
-                    execlp(command, command, (char *) NULL);
-                    exit(EXIT_FAILURE);  // execlp failed
+                if (is_bg) {
+                    children[child_count++] = pid;
                 } else {
-                    wait(NULL);  // wait for child process to finish
+                    fg_pid = pid;
+                    waitpid(pid, NULL, 0);
+                    fg_pid = 0;
                 }
             }
         }
@@ -133,3 +154,4 @@ int main() {
     return 0;
 }
 
+// ------------ stage 3 ---------------------

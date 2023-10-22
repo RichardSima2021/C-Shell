@@ -34,7 +34,8 @@ struct Job{
 struct Job* jobList[5] = {NULL};
 int latestJobId = 1;
 int nextJobIndex = 0;
-int foregroundStopped = 0;
+int fg_pid = 0;
+int intByKill = 0;
 
 void cleanJobList(int endedPid){
     // removes the job within joblist of the job that just ended
@@ -89,12 +90,28 @@ void resumeJobStatusFg(int restartPid, int fgStatus){
     }
 }
 
-void nonResponseINTHandler(int sig){
+void INTHandler(int sig){
     if (debug) printf("Handled SIGINT from %d\n", getpid());
+    if(getppid() == getpid()){
+        // is background, don't do anything
+    } else{
+        // is foreground
+        kill(getpid(), SIGINT);
+    }
 }
 
-void nonResponseTSTPHandler(int sig){
+void TSTPHandler(int sig){
     if (debug) printf("Handled TSTP from %d\n", getpid());
+    if(getppid() == getpid()){
+        // is background, don't do anything
+    } else{
+        // is foreground
+        kill(getpid(), SIGSTOP);
+    }
+}
+
+void shellINTHandler(int sig){
+    if (debug) printf("Handling INT from shell\n");
 }
 
 void shellTSTPHandler(int sig){
@@ -174,10 +191,8 @@ void executeTaskFg(char* programName, char** args, int numargs){
     pid_t pid = fork();
 
     if(pid == 0){
-        signal(SIGINT, SIG_DFL); // fg task must be able to be affected by Ctrl+C
-        signal(SIGTSTP, SIG_DFL); // fg task must be able to be affected by Ctrl+Z
-        // signal(SIGUSR2, foregroundUSR2Handler);
-        // signal(SIGCHLD, nonResponseCHLDHandler); 
+        signal(SIGINT, INTHandler); // fg task must be able to be affected by Ctrl+C
+        signal(SIGTSTP, TSTPHandler); // fg task must be able to be affected by Ctrl+Z
         if (debug) printf("Forked child and running fg process: %s pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         // child
         if(execv(programName, args)){
@@ -195,7 +210,6 @@ void executeTaskFg(char* programName, char** args, int numargs){
         newForeroundJob -> processId = pid;
         newForeroundJob -> foreground = 1;
         newForeroundJob -> status = "Running";
-        // newBackgroundJob -> args = args;
         newForeroundJob -> numargs = numargs;
 
         if (debug) printf("Duplicating the following arguments: ");
@@ -255,11 +269,15 @@ void bringToForeground(char** args, int numargs){
         if (debug) printf("Bring to foreground by processid via processid %d\n", restartPid);
         // by pid
     }
-
+    
+    
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
     } else{
         resumeJobStatusFg(restartPid, 1);
+        if (debug) printf("Setting process id: %d to process group id: %d\n", restartPid, getpid());
+        // set task to foreground process group id;
+        setpgid(restartPid,getpid());
         int child_status;
         int waitpid_status = waitpid(restartPid, &child_status, WUNTRACED); 
         
@@ -287,8 +305,8 @@ void executeTaskBg(char* programName, char** args, int numargs){
             // error setting pgid to its own pid
             perror("setpgid");
         }
-        signal(SIGINT, nonResponseINTHandler); // should not respond to any SIGINT
-        signal(SIGTSTP, nonResponseTSTPHandler); // should not respond to any SIGTSTP
+        signal(SIGINT, INTHandler); // should not respond to any SIGINT
+        signal(SIGTSTP, TSTPHandler); // should not respond to any SIGTSTP
         // signal(SIGCHLD, nonResponseCHLDHandler); // should not respond to any SIGCHLD
         if (debug) printf("Forked child and running bg process: %s, pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         if(execv(programName, args)){
@@ -347,23 +365,45 @@ void bringToBackground(char** args, int numargs){
         // by pid
     }
 
+    
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
     } else{
         resumeJobStatusFg(restartPid, 0);
-        if (debug) printf("Resumed in background");
+        // set task to background process group id;
+        setpgid(restartPid,restartPid);
+        if (debug) printf("Resumed in background\n");
     }
 }
 
 
 
 void killJob(char** args, int numargs){
-    int passedByJobID;
+    int killPid;
     if (args[1][0] == '%'){
-        printf("Killing job with jobid: %s", args[1]);
+        int length = 0;
+        while(args[1][length+1] != '\0'){
+            length += 1;
+        }
+        char jobidstr[length + 1];
+        strncpy(jobidstr, args[1] + 1, length);
+        jobidstr[length] = '\0';
+        int jobid = atoi(jobidstr);
+        if (debug) printf("Kill job via jobid %d\n", jobid);
+        for(int i = 0; i < nextJobIndex; i++){
+            if(jobList[i] -> jobId == jobid){
+                if (debug) printf("process id: %d\n", jobList[i] -> processId);
+                killPid = jobList[i] -> processId;
+                break;
+            }
+        }
     } else{
+        killPid = atoi(args[1]);
         printf("Killing job with processid: %s", args[1]);
     }
+    
+    kill(killPid, SIGKILL);
+    
 }
 
 void printJob(struct Job* jobPtr){
@@ -441,7 +481,7 @@ void executeCommand(char* command, char** args, int numargs){
 
 int main(){
     if (debug) printf("shell started in gpid: %d\n", getpgid(getpid()));
-    signal(SIGINT, nonResponseINTHandler);
+    signal(SIGINT, shellINTHandler);
     signal(SIGTSTP, shellTSTPHandler);
     signal(SIGCHLD, SIGCHLDHandler);
     char* command = "";
