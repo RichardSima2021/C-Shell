@@ -196,9 +196,11 @@ void executeTaskFg(char* programName, char** args, int numargs){
         if (debug) printf("Forked child and running fg process: %s pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         // child
         if(execv(programName, args)){
-            // if there's a return value at all
-            printf("%s: Program not found.\n", programName);
-            exit(0);
+            if(execvp(programName, args)){
+                // if there's a return value at all
+                printf("%s: Program not found.\n", programName);
+                exit(0);
+            }
         }
     } else{
         // parent, pid = process id of child
@@ -310,8 +312,10 @@ void executeTaskBg(char* programName, char** args, int numargs){
         // signal(SIGCHLD, nonResponseCHLDHandler); // should not respond to any SIGCHLD
         if (debug) printf("Forked child and running bg process: %s, pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         if(execv(programName, args)){
-            perror("execv");
-            exit(EXIT_FAILURE);
+            if(execvp(programName, args)){
+                perror("execv");
+                exit(EXIT_FAILURE);
+            }
         }
     } else{
         
