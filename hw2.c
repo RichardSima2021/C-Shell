@@ -401,7 +401,7 @@ void killJob(char** args, int numargs){
         killPid = atoi(args[1]);
         printf("Killing job with processid: %s", args[1]);
     }
-    
+
     kill(killPid, SIGKILL);
     
 }
@@ -496,6 +496,11 @@ int main(){
         command = strtok(inputBuffer, whitespace);
         
         if(strcmp(command, quit) == 0){
+            for(int i = 0; i < nextJobIndex; i++){
+                pid_t toKill = jobList[i] -> processId;
+                kill(toKill, SIGKILL);
+                if (debug) printf("Killed %d\n", toKill);
+            }
             break;
         } else{
             // defines an array of 80 charpointers [command, arg1, arg2, ...]
