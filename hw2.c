@@ -483,7 +483,7 @@ void executeCommand(char* command, char** args, int numargs){
         // print all jobs from jobList
         int jobIndex = 0;
         while(jobList[jobIndex] != NULL){
-            printJob(jobList[jobIndex]); // fill in printJob later
+            printJob(jobList[jobIndex]); 
             jobIndex += 1;
         }
     } else if(strcmp(command, "println") == 0){
