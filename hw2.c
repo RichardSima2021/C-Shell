@@ -390,13 +390,6 @@ void bringToBackground(char** args, int numargs){
         // by pid
     }
 
-    // for(int i = 0; i < nextJobIndex; i++){
-    //     if(jobList[i] -> processId == restartPid && jobList[i] -> foreground == 1){
-    //         // it used to be a fg process, now it's
-    //         fg_pid = 0;
-    //     }
-    // }
-    
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
     } else{
