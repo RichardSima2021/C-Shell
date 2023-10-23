@@ -14,7 +14,7 @@
 #define quit "quit"
 
 
-int debug = 1;
+int debug = 0;
 
 struct Job{
     // each child process owns a struct
@@ -90,25 +90,19 @@ void resumeJobStatus(int restartPid, int fgStatus){
     }
 }
 
-// void INTHandler(int sig){
-//     if (debug) printf("Handled SIGINT from %d\n", getpid());
-//     if(getpgid(getpid()) == getpid()){
-//         // is background, don't do anything
-//     } else{
-//         // is foreground
-//         kill(getpid(), SIGKILL);
-//     }
-// }
+void INTHandler(int sig){
+    if (debug) printf("Handled SIGINT from %d\n", getpid());
+    if(getpid() == fg_pid){
+        kill(getpid(), SIGINT);
+    }
+}
 
-// void TSTPHandler(int sig){
-//     if (debug) printf("Handled TSTP from %d\n", getpid());
-//     if(getpgid(getpid()) == getpid()){
-//         // is background, don't do anything
-//     } else{
-//         // is foreground
-//         kill(getpid(), SIGSTOP);
-//     }
-// }
+void TSTPHandler(int sig){
+    if (debug) printf("Handled TSTP from %d\n", getpid());
+    if(getpid() == fg_pid){
+        kill(getpid(), SIGTSTP);
+    }
+}
 
 void shellINTHandler(int sig){
     if (debug) printf("Handling INT from shell\n");
@@ -201,6 +195,14 @@ void executeTaskFg(char* programName, char** args, int numargs){
     pid_t pid = fork();
 
     if(pid == 0){
+        signal(SIGINT, INTHandler); // fg task must be able to be affected by Ctrl+C
+        signal(SIGTSTP, TSTPHandler); // fg task must be able to be affected by Ctrl+Z  
+
+        if(setpgid(getpid(),getpid()) == -1){
+            // error setting pgid to its own pid
+            perror("setpgid");
+        }
+
         if (debug) printf("Forked child and running fg process: %s pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         // child
         if(execv(programName, args)){
@@ -210,8 +212,7 @@ void executeTaskFg(char* programName, char** args, int numargs){
                 exit(0);
             }
         }
-        // signal(SIGINT, INTHandler); // fg task must be able to be affected by Ctrl+C
-        // signal(SIGTSTP, TSTPHandler); // fg task must be able to be affected by Ctrl+Z
+        
 
     } else{
         // parent, pid = process id of child
@@ -294,8 +295,6 @@ void bringToForeground(char** args, int numargs){
         resumeJobStatus(restartPid, 1);
         fg_pid = restartPid;
         if (debug) printf("Setting process id: %d to process group id: %d\n", restartPid, getpid());
-        // set task to foreground process group id;
-        setpgid(restartPid,getpid());
         if (debug) printf("Process with PID: %d now running in PG with PGID: %d\n", restartPid, getpgid(getpid()));
         int child_status;
         int waitpid_status = waitpid(restartPid, &child_status, WUNTRACED); 
@@ -328,6 +327,9 @@ void executeTaskBg(char* programName, char** args, int numargs){
             perror("setpgid");
         }
         
+        signal(SIGINT, INTHandler); // should not respond to any SIGINT
+        signal(SIGTSTP, TSTPHandler); // should not respond to any SIGTSTP
+        
         // signal(SIGCHLD, nonResponseCHLDHandler); // should not respond to any SIGCHLD
         if (debug) printf("Forked child and running bg process: %s, pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         if(execv(programName, args)){
@@ -336,8 +338,6 @@ void executeTaskBg(char* programName, char** args, int numargs){
                 exit(EXIT_FAILURE);
             }
         }
-        // signal(SIGINT, INTHandler); // should not respond to any SIGINT
-        // signal(SIGTSTP, TSTPHandler); // should not respond to any SIGTSTP
     } else{
         
         struct Job* newBackgroundJob = malloc(sizeof(struct Job)); // will need to free later in SIGCHLD handler or smth
@@ -401,8 +401,8 @@ void bringToBackground(char** args, int numargs){
         perror("SIGCONT signal error");
     } else{
         resumeJobStatus(restartPid, 0);
-        // set task to background process group id;
-        setpgid(restartPid,restartPid);
+        if (debug) printf("After resuming, restartPid is %d\n", restartPid);
+        if (debug) printf("Child process now has pid: %d, pgid: %d\n", restartPid, getpgid(restartPid));
         if (debug) printf("Resumed in background\n");
     }
 }
@@ -430,7 +430,7 @@ void killJob(char** args, int numargs){
         }
     } else{
         killPid = atoi(args[1]);
-        printf("Killing job with processid: %s", args[1]);
+        printf("Killing job with processid: %s\n", args[1]);
     }
 
     kill(killPid, SIGKILL);
@@ -510,6 +510,14 @@ void executeCommand(char* command, char** args, int numargs){
     
 }
 
+void commitGenocideOnChildren(){
+    for(int i = 0; i < nextJobIndex; i++){
+        pid_t toKill = jobList[i] -> processId;
+        kill(toKill, SIGKILL);
+        if (debug) printf("Killed %d\n", toKill);
+    }
+}
+
 int main(){
     if (debug) printf("shell started in gpid: %d\n", getpgid(getpid()));
     signal(SIGINT, shellINTHandler);
@@ -527,11 +535,7 @@ int main(){
         command = strtok(inputBuffer, whitespace);
         
         if(strcmp(command, quit) == 0){
-            for(int i = 0; i < nextJobIndex; i++){
-                pid_t toKill = jobList[i] -> processId;
-                kill(toKill, SIGKILL);
-                if (debug) printf("Killed %d\n", toKill);
-            }
+            commitGenocideOnChildren();
             break;
         } else{
             // defines an array of 80 charpointers [command, arg1, arg2, ...]
