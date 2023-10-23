@@ -14,7 +14,11 @@
 #define quit "quit"
 
 
-int debug = 0;
+int debug = 1;
+int writeToFile = 0;
+int readFromFile = 0;
+char* inputFile;
+char* outputFile;
 
 struct Job{
     // each child process owns a struct
@@ -546,6 +550,32 @@ int main(){
                 // continue reading arguments if exists
                 arg = strtok(NULL, whitespace);
             }
+
+            int numargs = argpos - 1;
+            if(numargs > 0){
+                if(strcmp(args[1], ">") == 0){
+                    // direct output
+                    writeToFile = 1;
+                    outputFile = args[2];
+                } else if(strcmp(args[1],"<") == 0){
+                    readFromFile = 1;
+                    inputFile = args[2];
+                    if(numargs > 2 && strcmp(args[3], ">") == 0){
+                        writeToFile = 1;
+                        outputFile = args[4];
+                    }
+                }
+            }
+
+            if(debug){
+                if(readFromFile){
+                    printf("Read from file %s\n",inputFile);
+                }
+                if(writeToFile){
+                    printf("Write to file %s\n", outputFile);
+                }
+            }
+            
             
             // argpos - 1 = actual number of arguments (excludes command) aka numargs in function
             // example:
@@ -553,7 +583,10 @@ int main(){
             // command = "count"
             // args = ["count", "5", "&"]
             // argpos = 2
-            executeCommand(command, args, argpos - 1);
+            // executeCommand(command, args, numargs);
+
+            readFromFile = 0;
+            writeToFile = 0;
         }
 
     }
