@@ -97,14 +97,14 @@ void resumeJobStatus(int restartPid, int fgStatus){
 void INTHandler(int sig){
     if (debug) printf("Handled SIGINT from %d\n", getpid());
     if(getpid() == fg_pid){
-        kill(getpid(), SIGINT);
+        kill(getpid(), SIGKILL);
     }
 }
 
 void TSTPHandler(int sig){
     if (debug) printf("Handled TSTP from %d\n", getpid());
     if(getpid() == fg_pid){
-        kill(getpid(), SIGTSTP);
+        kill(getpid(), SIGSTOP);
     }
 }
 
@@ -430,7 +430,7 @@ void killJob(char** args, int numargs){
         printf("Killing job with processid: %s\n", args[1]);
     }
 
-    kill(killPid, SIGKILL);
+    kill(killPid, SIGINT);
     
 }
 
@@ -583,7 +583,7 @@ int main(){
             // command = "count"
             // args = ["count", "5", "&"]
             // argpos = 2
-            // executeCommand(command, args, numargs);
+            executeCommand(command, args, numargs);
 
             readFromFile = 0;
             writeToFile = 0;
