@@ -90,32 +90,42 @@ void resumeJobStatus(int restartPid, int fgStatus){
     }
 }
 
-void INTHandler(int sig){
-    if (debug) printf("Handled SIGINT from %d\n", getpid());
-    if(getppid() == getpid()){
-        // is background, don't do anything
-    } else{
-        // is foreground
-        kill(getpid(), SIGINT);
-    }
-}
+// void INTHandler(int sig){
+//     if (debug) printf("Handled SIGINT from %d\n", getpid());
+//     if(getpgid(getpid()) == getpid()){
+//         // is background, don't do anything
+//     } else{
+//         // is foreground
+//         kill(getpid(), SIGKILL);
+//     }
+// }
 
-void TSTPHandler(int sig){
-    if (debug) printf("Handled TSTP from %d\n", getpid());
-    if(getppid() == getpid()){
-        // is background, don't do anything
-    } else{
-        // is foreground
-        kill(getpid(), SIGSTOP);
-    }
-}
+// void TSTPHandler(int sig){
+//     if (debug) printf("Handled TSTP from %d\n", getpid());
+//     if(getpgid(getpid()) == getpid()){
+//         // is background, don't do anything
+//     } else{
+//         // is foreground
+//         kill(getpid(), SIGSTOP);
+//     }
+// }
 
 void shellINTHandler(int sig){
     if (debug) printf("Handling INT from shell\n");
+    if (fg_pid > 0){
+        if (debug) printf("Terminating foreground process pid: %d, pgid: %d\n", fg_pid, getpgid(fg_pid));
+        kill(fg_pid, SIGINT);
+        fg_pid = 0;
+    }
 }
 
 void shellTSTPHandler(int sig){
     if (debug) printf("Handling TSTP from shell\n");
+    if (fg_pid > 0){
+        if (debug) printf("Stopping foreground process pid: %d, pgid: %d\n", fg_pid, getpgid(fg_pid));
+        kill(fg_pid, SIGTSTP);
+        fg_pid = 0;
+    }
 }
 
 void SIGCHLDHandler(int sig){
@@ -191,8 +201,6 @@ void executeTaskFg(char* programName, char** args, int numargs){
     pid_t pid = fork();
 
     if(pid == 0){
-        signal(SIGINT, INTHandler); // fg task must be able to be affected by Ctrl+C
-        signal(SIGTSTP, TSTPHandler); // fg task must be able to be affected by Ctrl+Z
         if (debug) printf("Forked child and running fg process: %s pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         // child
         if(execv(programName, args)){
@@ -202,11 +210,14 @@ void executeTaskFg(char* programName, char** args, int numargs){
                 exit(0);
             }
         }
+        // signal(SIGINT, INTHandler); // fg task must be able to be affected by Ctrl+C
+        // signal(SIGTSTP, TSTPHandler); // fg task must be able to be affected by Ctrl+Z
+
     } else{
         // parent, pid = process id of child
         int child_status;
         if (debug) printf("shell waiting for foreground task to complete\n");
-
+        fg_pid = pid;
         struct Job* newForeroundJob = malloc(sizeof(struct Job)); // will need to free later in SIGCHLD handler or smth
         newForeroundJob -> jobId = latestJobId;
         newForeroundJob -> processId = pid;
@@ -236,12 +247,15 @@ void executeTaskFg(char* programName, char** args, int numargs){
         if (WIFEXITED(child_status)){
             if (debug) printf("Foreground child finished and reaped\n");
             cleanJobList(waitpid_status);
+            fg_pid = 0;
         } else if (WIFSIGNALED(child_status)){
             if (debug) printf("Foreground child was terminated and reaped\n");
             cleanJobList(waitpid_status);
+            fg_pid = 0;
         } else if (WIFSTOPPED(child_status)){
             if (debug) printf("Foreground child was stopped\n");
             jobStatusStopped(waitpid_status);
+            fg_pid = 0;
         }
     }
 }
@@ -272,11 +286,13 @@ void bringToForeground(char** args, int numargs){
         // by pid
     }
     
+    fg_pid = restartPid;
     
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
     } else{
         resumeJobStatus(restartPid, 1);
+        fg_pid = restartPid;
         if (debug) printf("Setting process id: %d to process group id: %d\n", restartPid, getpid());
         // set task to foreground process group id;
         setpgid(restartPid,getpid());
@@ -289,12 +305,15 @@ void bringToForeground(char** args, int numargs){
         if (WIFEXITED(child_status)){
             if (debug) printf("Foreground child finished and reaped\n");
             cleanJobList(waitpid_status);
+            fg_pid = 0;
         } else if (WIFSIGNALED(child_status)){
             if (debug) printf("Foreground child was terminated and reaped\n");
             cleanJobList(waitpid_status);
+            fg_pid = 0;
         } else if (WIFSTOPPED(child_status)){
             if (debug) printf("Foreground child was stopped\n");
             jobStatusStopped(waitpid_status);
+            fg_pid = 0;
         }
     }
 }
@@ -308,8 +327,7 @@ void executeTaskBg(char* programName, char** args, int numargs){
             // error setting pgid to its own pid
             perror("setpgid");
         }
-        signal(SIGINT, INTHandler); // should not respond to any SIGINT
-        signal(SIGTSTP, TSTPHandler); // should not respond to any SIGTSTP
+        
         // signal(SIGCHLD, nonResponseCHLDHandler); // should not respond to any SIGCHLD
         if (debug) printf("Forked child and running bg process: %s, pid: %d, pgid: %d\n", programName, getpid(), getpgid(getpid()));
         if(execv(programName, args)){
@@ -318,6 +336,8 @@ void executeTaskBg(char* programName, char** args, int numargs){
                 exit(EXIT_FAILURE);
             }
         }
+        // signal(SIGINT, INTHandler); // should not respond to any SIGINT
+        // signal(SIGTSTP, TSTPHandler); // should not respond to any SIGTSTP
     } else{
         
         struct Job* newBackgroundJob = malloc(sizeof(struct Job)); // will need to free later in SIGCHLD handler or smth
@@ -370,6 +390,12 @@ void bringToBackground(char** args, int numargs){
         // by pid
     }
 
+    // for(int i = 0; i < nextJobIndex; i++){
+    //     if(jobList[i] -> processId == restartPid && jobList[i] -> foreground == 1){
+    //         // it used to be a fg process, now it's
+    //         fg_pid = 0;
+    //     }
+    // }
     
     if (kill(restartPid, SIGCONT) == -1){
         perror("SIGCONT signal error");
