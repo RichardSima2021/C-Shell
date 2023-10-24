@@ -14,9 +14,10 @@
 #define quit "quit"
 
 
-int debug = 1;
+int debug = 0;
 int writeToFile = 0;
 int readFromFile = 0;
+int appendToFile = 0;
 char* inputFile;
 char* outputFile;
 
@@ -430,7 +431,7 @@ void killJob(char** args, int numargs){
         printf("Killing job with processid: %s\n", args[1]);
     }
 
-    kill(killPid, SIGINT);
+    kill(killPid, SIGKILL);
     
 }
 
@@ -522,6 +523,9 @@ int main(){
     signal(SIGCHLD, SIGCHLDHandler);
     char* command = "";
     
+    int stdin_fileno_original = dup(STDIN_FILENO); // dupe stdin_fileno
+    int stdout_fileno_original = dup(STDOUT_FILENO); // dupe stdout_fileno
+    
     while(1){
         char inputBuffer[bufferSize]; 
         promptInput(inputBuffer);
@@ -557,25 +561,62 @@ int main(){
                     // direct output
                     writeToFile = 1;
                     outputFile = args[2];
+                } else if(strcmp(args[1], ">>") == 0){
+                    appendToFile = 1;
+                    outputFile = args[2];
                 } else if(strcmp(args[1],"<") == 0){
                     readFromFile = 1;
                     inputFile = args[2];
                     if(numargs > 2 && strcmp(args[3], ">") == 0){
                         writeToFile = 1;
                         outputFile = args[4];
+                    } else if(numargs > 2 && strcmp(args[3], ">>") == 0){
+                        appendToFile = 1;
+                        outputFile = args[4];
                     }
                 }
             }
 
-            if(debug){
+            int skipExecution = 0;
+            int ifd;
+            int ofd;
+
+            if (readFromFile || writeToFile || appendToFile){
+                mode_t mode = S_IRWXU | S_IRWXG | S_IRWXO;
                 if(readFromFile){
-                    printf("Read from file %s\n",inputFile);
-                }
+                    if (debug) printf("Read from file %s\n",inputFile);
+                    if ((ifd = open(inputFile, O_RDONLY, mode)) < 0){  
+                        skipExecution = 1;
+                        perror("open");
+                        if (debug) printf("input file open error\n");
+                    } else{
+                        dup2(ifd, STDIN_FILENO); 
+                    }
+                } 
                 if(writeToFile){
-                    printf("Write to file %s\n", outputFile);
+                    if (debug) printf("Write to file %s\n", outputFile);
+                    if ((ofd = open(outputFile, O_CREAT|O_WRONLY|O_TRUNC, mode)) < 0){
+                        skipExecution = 1;
+                        perror("open");
+                        if (debug) printf("output file open error\n");
+                    } else{
+                        dup2(ofd, STDOUT_FILENO);
+                    }
+                } else if(appendToFile){
+                    if (debug) printf("Append to file %s\n", outputFile);
+                    if ((ofd = open(outputFile, O_CREAT|O_APPEND|O_WRONLY, mode)) < 0){
+                        skipExecution = 1;
+                        perror("open");
+                        if (debug) printf("output append file open error\n");
+                    } else{
+                        dup2(ofd, STDOUT_FILENO);
+                    }
                 }
-            }
-            
+                for (int i = 1; i < numargs + 1; i++){
+                    args[i] = NULL; // clear args since only args were filenames
+                }
+                numargs = 0;
+            } 
             
             // argpos - 1 = actual number of arguments (excludes command) aka numargs in function
             // example:
@@ -583,10 +624,28 @@ int main(){
             // command = "count"
             // args = ["count", "5", "&"]
             // argpos = 2
-            executeCommand(command, args, numargs);
+            if (skipExecution){
+                printf("Erroneous Input\n");
+            } else{
+                executeCommand(command, args, numargs);
+            }
+            if (readFromFile){
+                if (close(ifd) < 0){
+                    perror("close");
+                }
+            }
+            if (writeToFile || appendToFile){
+                if(close(ofd) < 0){
+                    perror("close");
+                }
+            } 
 
+            dup2(stdin_fileno_original, STDIN_FILENO); // reset input to stdin
+            dup2(stdout_fileno_original, STDOUT_FILENO); // reset output to stdout
             readFromFile = 0;
             writeToFile = 0;
+            appendToFile = 0;
+            skipExecution = 0;
         }
 
     }

@@ -9,6 +9,6 @@ int main(int argc, char * argv[]){
     printf( "Enter a value :");
     scanf("%d", &i);
 
-    printf( "\nYou entered: %d\n", i);
+    printf( "You entered: %d\n", i);
     return 0;
 }
